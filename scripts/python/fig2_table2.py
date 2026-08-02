@@ -38,6 +38,7 @@ R2_best = np.full(n, np.nan)
 chis1 = np.full(n, np.nan); chis2 = np.full(n, np.nan)
 chis1p = np.full(n, np.nan); chis2p = np.full(n, np.nan)
 chimond = np.full(n, np.nan)
+nbins_R500 = np.full(n, 0, dtype=int)
 
 for i, clust in enumerate(clusters):
     d = read_cluster(clust)
@@ -65,6 +66,7 @@ for i, clust in enumerate(clusters):
         chi02[j] = np.nansum(((ap-obs)[lgR2])**2 / obs_err[lgR2]**2)
         aMOND2 = pr["a_MOND2"]
     chimond[i] = np.nansum(((aMOND2-obs)[lgR1])**2 / obs_err[lgR1]**2)
+    nbins_R500[i] = int(lgR1.sum())
 
     R0_best[i] = R0s[np.argmin(chi00)]
     R1_best[i] = R0s[np.argmin(chi01)]
@@ -75,11 +77,21 @@ for i, clust in enumerate(clusters):
 
 # +200 nudge for perfectly-fit cases (as in the paper)
 R2_best[chis2p == 100] += 200
-# r_nei uncertainty: sample sd of the squared best-fit radii across the
-# three outer-radius windows, combined with a 10 kpc grid floor
+# r_nei uncertainty (heuristic, not a formal confidence interval):
+# the sample standard deviation of the best-fit r_nei across the three
+# outer-radius window definitions (R>=500, >=1000, >=1500 kpc), combined in
+# quadrature with a 10 kpc floor set by the R0 scan grid step. It measures the
+# sensitivity of r_nei to the chosen fitting window, not a chi^2 interval.
 R_err = np.round(np.sqrt(10**2 +
         np.std(np.vstack([R2_best**2, R1_best**2, R0_best**2]), axis=0, ddof=1)))
 
+# Degrees of freedom in Table 2:
+#  - the tabulated chi^2 (chis2) is computed over the R>=1000 kpc window
+#    (per-cluster ~22-31 bins);
+#  - the p-value column uses per-cluster dof, df = n_i - 1 (lgR2.sum()-1);
+#  - the 95% significance flag compares chi^2 to the fixed threshold
+#    chi^2(95%, df=42) = 58.12, matching the paper's n=43 (R>=500 kpc)
+#    convention.
 signif = np.where(chis2 < h.CHI2_THRESHOLD_95, "*", "-")
 
 
@@ -93,6 +105,12 @@ for i, c in enumerate(clusters):
     print(f"{c:<9}{int(R2_best[i]):>7}{int(R_err[i]):>6}"
           f"{chis2[i]:>8.1f}{pfmt(chis2p[i]):>6}{signif[i]:>5}")
 print(f"\nchi^2 threshold (95%, df=42) = {h.CHI2_THRESHOLD_95:.2f}")
+# MOND (MLS interpolation, no EFE) evaluated per cluster over the R>=500 kpc
+# window. The smallest per-cluster chi^2 is MOND's best case across the sample;
+# even this minimum lies far above the 95% threshold.
+imin = int(np.nanargmin(chimond))
+print(f"MOND best-case (minimum) per-cluster chi^2 = {chimond[imin]:.0f} "
+      f"({clusters[imin]}, n={nbins_R500[imin]} bins, R>=500 kpc)")
 
 # CSV
 import csv

@@ -35,6 +35,7 @@ R0_best <- R1_best <- R2_best <- rep(NA, length(clusters))
 chis1 <- chis2 <- chis1.p <- chis2.p <- rep(NA, length(clusters))
 chimond <- chimond.p <- rep(NA, length(clusters))
 nbins_R1000 <- rep(NA, length(clusters))
+nbins_R500  <- rep(NA, length(clusters))
 
 for (iclu in seq_along(clusters)) {
   d <- read_cluster(clusters[iclu])
@@ -51,6 +52,7 @@ for (iclu in seq_along(clusters)) {
   lgR1 <- d$R_REF >= 500
   lgR2 <- d$R_REF >= 1000
   nbins_R1000[iclu] <- sum(lgR2)
+  nbins_R500[iclu]  <- sum(lgR1)
 
   chi00 <- chi01 <- chi02 <- rep(NA, length(R0s))
   aMOND2_last <- NULL
@@ -77,9 +79,20 @@ for (iclu in seq_along(clusters)) {
 
 ## Adjustment used in the paper: perfectly-fit cases nudge r_nei by +200
 R2_best[chis2.p == 100] <- R2_best[chis2.p == 100] + 200
-## r_nei uncertainty: scatter of the best-fit r_nei across the three windows
+## r_nei uncertainty (heuristic, not a formal confidence interval):
+## the sample standard deviation of the best-fit r_nei across the three
+## outer-radius window definitions (R>=500, >=1000, >=1500 kpc), combined in
+## quadrature with a 10 kpc floor set by the R0 scan grid step. It measures the
+## sensitivity of r_nei to the chosen fitting window, not a chi^2 interval.
 R_err <- round(sqrt(10^2 + apply(cbind(R2_best, R1_best, R0_best)^2, 1, sd)))
 
+## Degrees of freedom in Table 2:
+##  - the tabulated chi^2 (chis2) is computed over the R>=1000 kpc window
+##    (per-cluster ~22-31 bins);
+##  - the p-value column uses per-cluster dof, df = n_i - 1 (sum(lgR2)-1);
+##  - the 95% significance flag compares chi^2 to the fixed threshold
+##    chi^2(95%, df=42) = 58.12, matching the paper's n=43 (R>=500 kpc)
+##    convention.
 signif95 <- ifelse(chis2 < CHI2_THRESHOLD_95, "*", "-")
 pfmt <- function(p) ifelse(p < 1, "<1", ifelse(p > 99, ">99", as.character(p)))
 
@@ -96,8 +109,12 @@ table2 <- data.frame(
 cat("\n==== TABLE 2 ====\n")
 print(table2, row.names = FALSE)
 cat(sprintf("\nchi^2 threshold (95%%, df=42) = %.2f\n", CHI2_THRESHOLD_95))
-cat(sprintf("MOND global min chi^2 (sum over clusters, R>=500) = %.0f\n",
-            sum(chimond, na.rm = TRUE)))
+## MOND (MLS interpolation, no EFE) evaluated per cluster over the R>=500 kpc
+## window. The smallest per-cluster chi^2 is MOND's best case across the sample;
+## even this minimum lies far above the 95% threshold.
+imin <- which.min(chimond)
+cat(sprintf("MOND best-case (minimum) per-cluster chi^2 = %.0f (%s, n=%d bins, R>=500 kpc)\n",
+            chimond[imin], clusters[imin], nbins_R500[imin]))
 
 dir.create(file.path(P$root, "tables"), showWarnings = FALSE)
 write.csv(table2, file.path(P$root, "tables", "table2_hmg_fit.csv"),

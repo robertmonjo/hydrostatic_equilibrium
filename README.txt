@@ -60,5 +60,25 @@ Data sources (bundled in data/)
   table1_xcop_properties.csv   Table 1 (literature values), from Monjo (2025),
       adapted from Eckert et al. (2022).
 
+  See data/PROVENANCE.md for the full manifest: per-file source, citation
+  (with DOI/URL), epoch, reformatting notes, SHA-256 hashes, and which files
+  the pipeline consumes versus which are bundled only for reference.
+
 Datasets are the property of their original authors and are redistributed here
 for reproducibility with attribution.
+
+
+Methods notes
+-------------
+  r_nei uncertainty (Table 2, r_nei_err). This is a heuristic sensitivity
+  measure, not a formal confidence interval: the sample standard deviation of
+  the best-fit r_nei across the three outer-radius window definitions
+  (R>=500, >=1000, >=1500 kpc), combined in quadrature with a 10 kpc floor set
+  by the R0 scan grid step. It quantifies how r_nei depends on the chosen
+  fitting window.
+
+  Degrees of freedom (Table 2). The tabulated chi^2 is computed over the
+  R>=1000 kpc window (per-cluster ~22-31 bins). The p-value column uses
+  per-cluster degrees of freedom, df = n_i - 1. The 95% significance flag
+  compares chi^2 to the fixed threshold chi^2(95%, df=42) = 58.12, which
+  corresponds to the paper's n=43 (R>=500 kpc) convention.
