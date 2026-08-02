@@ -83,13 +83,15 @@ hmg_predict <- function(M_enc_kg, R_ref_kpc, R0_kpc, r_grav = 40,
 
 ## ---- Paths -----------------------------------------------------------
 hmg_paths <- function() {
-  ## resolve data / figures dirs relative to this script location
+  ## resolve data / figures dirs relative to this script location; when sourced
+  ## interactively the --file= argument is absent, so fall back to the working
+  ## directory rather than producing an NA path.
   args <- commandArgs(trailingOnly = FALSE)
   fa   <- grep("--file=", args, value = TRUE)
-  if (length(fa)) {
+  if (length(fa) && !is.na(fa[1])) {
     here <- dirname(normalizePath(sub("--file=", "", fa[1])))
   } else {
-    here <- normalizePath(".")
+    here <- normalizePath(getwd())
   }
   root <- normalizePath(file.path(here, "..", ".."))
   list(root = root,

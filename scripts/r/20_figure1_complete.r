@@ -6,9 +6,10 @@
 # Data: EIN3_bar_mass.fits + gbar_gobs_*.fits (Eckert et al. 2022).
 # =====================================================================
 
-sdir <- tryCatch(dirname(normalizePath(sub("--file=", "",
-        grep("--file=", commandArgs(FALSE), value = TRUE)[1]))),
-        error = function(e) ".")
+sdir <- tryCatch({
+  fa <- grep("--file=", commandArgs(FALSE), value = TRUE)
+  if (length(fa)) dirname(normalizePath(sub("--file=", "", fa[1]))) else getwd()
+}, error = function(e) getwd())
 source(file.path(sdir, "00_hmg_common.r"))
 suppressMessages(library(FITSio))
 P <- hmg_paths()

@@ -5,9 +5,10 @@
 # Uses Einasto mass profiles (EIN3_mass.fits) from Eckert et al. (2022).
 # =====================================================================
 
-sdir <- tryCatch(dirname(normalizePath(sub("--file=", "",
-        grep("--file=", commandArgs(FALSE), value = TRUE)[1]))),
-        error = function(e) ".")
+sdir <- tryCatch({
+  fa <- grep("--file=", commandArgs(FALSE), value = TRUE)
+  if (length(fa)) dirname(normalizePath(sub("--file=", "", fa[1]))) else getwd()
+}, error = function(e) getwd())
 source(file.path(sdir, "00_hmg_common.r"))
 suppressMessages(library(FITSio))
 P <- hmg_paths()
@@ -57,7 +58,7 @@ for (iclu in seq_along(clusters)) {
   chi00 <- chi01 <- chi02 <- rep(NA, length(R0s))
   aMOND2_last <- NULL
   for (iir in seq_along(R0s)) {
-    pr <- hmg_predict(M_gas_kg, d$R_REF, R0s[iir], r_grav = 40)
+    pr <- hmg_predict(M_gas_kg, d$R_REF, R0s[iir], r_grav = 50)
     ap <- pr$a_pred1
     chi00[iir] <- sum((ap-obs)[lgR0]^2/obs_err[lgR0]^2, na.rm = TRUE)
     chi01[iir] <- sum((ap-obs)[lgR1]^2/obs_err[lgR1]^2, na.rm = TRUE)
@@ -77,19 +78,25 @@ for (iclu in seq_along(clusters)) {
   chis2.p[iclu] <- round(100*pchisq(chis2[iclu], df = sum(lgR2)-1))
 }
 
-## Adjustment used in the paper: perfectly-fit cases nudge r_nei by +200
+## Paper convention: for clusters whose chi^2 CDF rounds to 100% (a perfect or
+## over-fit), the reported r_nei is the fitted value + 200 kpc; chi^2 is not
+## recomputed.
 R2_best[chis2.p == 100] <- R2_best[chis2.p == 100] + 200
-## r_nei uncertainty (heuristic, not a formal confidence interval):
-## the sample standard deviation of the best-fit r_nei across the three
-## outer-radius window definitions (R>=500, >=1000, >=1500 kpc), combined in
-## quadrature with a 10 kpc floor set by the R0 scan grid step. It measures the
-## sensitivity of r_nei to the chosen fitting window, not a chi^2 interval.
+## r_nei uncertainty (empirical window-sensitivity spread, not a formal
+## confidence interval): sqrt(10^2 + sample standard deviation, over the three
+## outer-radius windows (R>=500, >=1000, >=1500 kpc), of the best-fit r_nei^2),
+## with the 10 kpc term set by the R0 scan grid step. This variant matches the
+## paper's tabulated uncertainties. RXC1825 is an outlier relative to the
+## paper's quoted +/-110.
 R_err <- round(sqrt(10^2 + apply(cbind(R2_best, R1_best, R0_best)^2, 1, sd)))
 
 ## Degrees of freedom in Table 2:
 ##  - the tabulated chi^2 (chis2) is computed over the R>=1000 kpc window
 ##    (per-cluster ~22-31 bins);
-##  - the p-value column uses per-cluster dof, df = n_i - 1 (sum(lgR2)-1);
+##  - the chi2_cdf_pct column is the lower-tail chi^2 CDF percentile (pchisq)
+##    with per-cluster dof, df = n_i - 1 (sum(lgR2)-1). This is the paper's
+##    convention (high value = rejection), not a standard upper-tail
+##    goodness-of-fit p-value;
 ##  - the 95% significance flag compares chi^2 to the fixed threshold
 ##    chi^2(95%, df=42) = 58.12, matching the paper's n=43 (R>=500 kpc)
 ##    convention.
@@ -97,12 +104,12 @@ signif95 <- ifelse(chis2 < CHI2_THRESHOLD_95, "*", "-")
 pfmt <- function(p) ifelse(p < 1, "<1", ifelse(p > 99, ">99", as.character(p)))
 
 table2 <- data.frame(
-  Cluster  = clusters,
-  r_nei    = R2_best,
-  r_nei_err= R_err,
-  chi2     = round(chis2, 1),
-  chi2_p   = pfmt(chis2.p),
-  signif95 = signif95,
+  Cluster      = clusters,
+  r_nei        = R2_best,
+  r_nei_err    = R_err,
+  chi2         = round(chis2, 1),
+  chi2_cdf_pct = pfmt(chis2.p),
+  signif95     = signif95,
   stringsAsFactors = FALSE
 )
 

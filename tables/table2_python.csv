@@ -1,4 +1,4 @@
-Cluster,r_nei,r_nei_err,chi2,chi2_p,signif95
+Cluster,r_nei,r_nei_err,chi2,chi2_cdf_pct,signif95
 A85,1180,264,24.8,41,*
 A644,930,549,66.2,>99,-
 A1644,360,198,4.3,<1,*

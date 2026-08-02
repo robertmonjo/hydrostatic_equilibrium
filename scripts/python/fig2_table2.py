@@ -46,7 +46,10 @@ for i, clust in enumerate(clusters):
     Rref = d["R_REF"]
 
     obs    = h.GN*h.Msol*(d["M_DM"]    + d["MGAS"])    / (Rref     *h.kpc)**2
-    obs_HI = h.GN*h.Msol*(d["M_DM_HI"] + d["MGAS_HI"]) / (d["R_IN"] *h.kpc)**2
+    # R_IN can be 0 for the innermost bin; suppress the divide warning (this bin
+    # lies inside the R>=1000 kpc fit window's lower edge and does not affect it).
+    with np.errstate(divide="ignore", invalid="ignore"):
+        obs_HI = h.GN*h.Msol*(d["M_DM_HI"] + d["MGAS_HI"]) / (d["R_IN"] *h.kpc)**2
     obs_LO = h.GN*h.Msol*(d["M_DM_LO"] + d["MGAS_LO"]) / (d["R_OUT"]*h.kpc)**2
     obs_err = (obs_HI - obs_LO) / 2
 
@@ -59,7 +62,7 @@ for i, clust in enumerate(clusters):
     chi02 = np.empty_like(R0s, float)
     aMOND2 = None
     for j, R0 in enumerate(R0s):
-        pr = h.hmg_predict(M_gas, Rref, R0, r_grav=40)
+        pr = h.hmg_predict(M_gas, Rref, R0, r_grav=50)
         ap = pr["a_pred1"]
         chi00[j] = np.nansum(((ap-obs)[lgR0])**2 / obs_err[lgR0]**2)
         chi01[j] = np.nansum(((ap-obs)[lgR1])**2 / obs_err[lgR1]**2)
@@ -75,20 +78,26 @@ for i, clust in enumerate(clusters):
     chis1p[i] = round(100*chi2_dist.cdf(chis1[i], df=int(lgR1.sum())-1))
     chis2p[i] = round(100*chi2_dist.cdf(chis2[i], df=int(lgR2.sum())-1))
 
-# +200 nudge for perfectly-fit cases (as in the paper)
+# Paper convention: for clusters whose chi^2 CDF rounds to 100% (a perfect or
+# over-fit), the reported r_nei is the fitted value + 200 kpc; chi^2 is not
+# recomputed.
 R2_best[chis2p == 100] += 200
-# r_nei uncertainty (heuristic, not a formal confidence interval):
-# the sample standard deviation of the best-fit r_nei across the three
-# outer-radius window definitions (R>=500, >=1000, >=1500 kpc), combined in
-# quadrature with a 10 kpc floor set by the R0 scan grid step. It measures the
-# sensitivity of r_nei to the chosen fitting window, not a chi^2 interval.
+# r_nei uncertainty (empirical window-sensitivity spread, not a formal
+# confidence interval): sqrt(10^2 + sample standard deviation, over the three
+# outer-radius windows (R>=500, >=1000, >=1500 kpc), of the best-fit r_nei^2),
+# with the 10 kpc term set by the R0 scan grid step. This variant matches the
+# paper's tabulated uncertainties. RXC1825 is an outlier relative to the
+# paper's quoted +/-110.
 R_err = np.round(np.sqrt(10**2 +
         np.std(np.vstack([R2_best**2, R1_best**2, R0_best**2]), axis=0, ddof=1)))
 
 # Degrees of freedom in Table 2:
 #  - the tabulated chi^2 (chis2) is computed over the R>=1000 kpc window
 #    (per-cluster ~22-31 bins);
-#  - the p-value column uses per-cluster dof, df = n_i - 1 (lgR2.sum()-1);
+#  - the chi2_cdf_pct column is the lower-tail chi^2 CDF percentile (chi2.cdf)
+#    with per-cluster dof, df = n_i - 1 (lgR2.sum()-1). This is the paper's
+#    convention (high value = rejection), not a standard upper-tail
+#    goodness-of-fit p-value;
 #  - the 95% significance flag compares chi^2 to the fixed threshold
 #    chi^2(95%, df=42) = 58.12, matching the paper's n=43 (R>=500 kpc)
 #    convention.
@@ -100,10 +109,10 @@ def pfmt(p):
 
 
 print("\n==== TABLE 2 (Python) ====")
-print(f"{'Cluster':<9}{'r_nei':>7}{'+/-':>6}{'chi2':>8}{'p':>6}{'sig':>5}")
+print(f"{'Cluster':<9}{'r_nei':>7}{'+/-':>6}{'chi2':>8}{'chi2_cdf_pct':>14}{'sig':>5}")
 for i, c in enumerate(clusters):
     print(f"{c:<9}{int(R2_best[i]):>7}{int(R_err[i]):>6}"
-          f"{chis2[i]:>8.1f}{pfmt(chis2p[i]):>6}{signif[i]:>5}")
+          f"{chis2[i]:>8.1f}{pfmt(chis2p[i]):>14}{signif[i]:>5}")
 print(f"\nchi^2 threshold (95%, df=42) = {h.CHI2_THRESHOLD_95:.2f}")
 # MOND (MLS interpolation, no EFE) evaluated per cluster over the R>=500 kpc
 # window. The smallest per-cluster chi^2 is MOND's best case across the sample;
@@ -116,7 +125,7 @@ print(f"MOND best-case (minimum) per-cluster chi^2 = {chimond[imin]:.0f} "
 import csv
 with open(os.path.join(h.TAB, "table2_python.csv"), "w", newline="") as fh:
     w = csv.writer(fh)
-    w.writerow(["Cluster", "r_nei", "r_nei_err", "chi2", "chi2_p", "signif95"])
+    w.writerow(["Cluster", "r_nei", "r_nei_err", "chi2", "chi2_cdf_pct", "signif95"])
     for i, c in enumerate(clusters):
         w.writerow([c, int(R2_best[i]), int(R_err[i]),
                     round(chis2[i], 1), pfmt(chis2p[i]), signif[i]])
